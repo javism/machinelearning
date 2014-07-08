@@ -7,5 +7,4 @@ Some machine learning codes
 
 An extension of the [svm_gui application example](http://scikit-learn.org/stable/auto_examples/applications/svm_gui.html#example-applications-svm-gui-py) of scikit-learn. Needs numpy, matplotlib and scikit-learn Python modules.
 
-![Support vector regression example plot](pics/svrexample.png)
-
+<img src="pics/svrexample.png" alt="Support vector regression example plot" width="400px">
