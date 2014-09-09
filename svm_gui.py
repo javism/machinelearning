@@ -13,6 +13,10 @@ negative examples click the right button.
 
 If all examples are from the same class, it uses a one-class SVM.
 
+Extension: this extension allows to use epsilon-SVM for regression (SVR).
+Instead of plotting decision surfaces the epsilon tube and support vectors
+are drawn.
+
 """
 from __future__ import division, print_function
 
@@ -32,11 +36,13 @@ from matplotlib.figure import Figure
 from matplotlib.contour import ContourSet
 
 import Tkinter as Tk
+import tkFileDialog
 import sys
 import numpy as np
 
 from sklearn import svm
 from sklearn.datasets import dump_svmlight_file
+from sklearn.datasets import load_svmlight_file
 from sklearn.externals.six.moves import xrange
 
 y_min, y_max = -50, 50
@@ -68,12 +74,16 @@ class Model(object):
     def set_surface(self, surface):
         self.surface = surface
 
+    def load_svmlight_file(self, file):
+        X, y = load_svmlight_file(file)
+        self.data = []
+        self.data =  np.concatenate( (X.toarray(), np.transpose([y])), axis=1).tolist()
+
     def dump_svmlight_file(self, file):
         data = np.array(self.data)
         X = data[:, 0:2]
         y = data[:, 2]
         dump_svmlight_file(X, y, file)
-
 
 class Controller(object):
     def __init__(self, model):
@@ -90,6 +100,7 @@ class Controller(object):
 
         C = float(self.complexity.get())
         gamma = float(self.gamma.get())
+        epsilon = float(self.epsilon.get())
         coef0 = float(self.coef0.get())
         degree = int(self.degree.get())
         # epsilon = float(self.epsilon.get())
@@ -117,20 +128,16 @@ class Controller(object):
             self.model.changed("surface")
 
         else:
-            # Sort X for plotting purposes
-            # TODO: user argsort y mirar si ordenador sólo antes de pintar con
-            #train = np.sort(train,axis=0)
-
             X = train[:, 0:1]
             y = train[:, 1:2]
-            y=y[:,0] #TODO unhack
+            y=y[:,0]
 
             clf = svm.SVR(kernel=kernel_map[self.kernel.get()], C=C,
-                          gamma=gamma, coef0=coef0, degree=degree, epsilon=10)
+                          gamma=gamma, coef0=coef0, degree=degree, epsilon=epsilon)
             y_pred = clf.fit(X, y).predict(X)
 
             self.model.clf = clf
-            # TODO: Estos datos no son del modelo, deberían ir en otra parte?
+            # TODO: These data does not belong to the model, so maybe they should be placed outside
             self.model.y_pred = y_pred
             self.model.X = X
             self.model.y = y
@@ -164,6 +171,15 @@ class Controller(object):
         if self.fitted:
             self.fit()
 
+    def open_file(self, file, format='csv'):
+        self.model.changed("clear")
+        self.model.load_svmlight_file(file)
+        self.model.changed("examples_loaded")
+
+
+    def save_file(self, file, format='csv'):
+        self.model.dump_svmlight_file(file)
+
 
 class View(object):
     """Test docstring. """
@@ -183,6 +199,7 @@ class View(object):
         toolbar = NavigationToolbar2TkAgg(canvas, root)
         toolbar.update()
         self.controllbar = ControllBar(root, controller)
+        self.menubar = MenuBar(root, controller)
         self.f = f
         self.ax = ax
         self.canvas = canvas
@@ -192,17 +209,22 @@ class View(object):
         self.c_labels = None
         self.plot_kernels()
 
+        self.class_colors = ('b', 'r', 'g', 'y')
+
     def plot_kernels(self):
         self.ax.text(-50, -60, "Linear: $u^T v$")
         self.ax.text(-20, -60, "RBF: $\exp (-\gamma \| u-v \|^2)$")
         self.ax.text(10, -60, "Poly: $(\gamma \, u^T v + r)^d$")
 
     def onclick(self, event):
+        # TODO: Update for multiclass
         if event.xdata and event.ydata:
             if event.button == 1:
                 self.controller.add_example(event.xdata, event.ydata, 1)
             elif event.button == 3:
-                self.controller.add_example(event.xdata, event.ydata, -1)
+                print(self.controller.classification.get())
+                self.controller.add_example(event.xdata, event.ydata, -1 if self.controller.classification.get() else 1)
+
 
     def update_example(self, model, idx):
         x, y, l = model.data[idx]
@@ -315,8 +337,49 @@ class View(object):
                                      (y_pred + epsilon)[::-1]]),
                      alpha=.2, fc='b', ec='None', label='epsilon tube'))
 
+class MenuBar(object):
+    def __init__(self, root, controller):
+        self.controller = controller
+        menubar = Tk.Menu(root)
+
+        # create a pulldown menu, and add it to the menu bar
+        filemenu = Tk.Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Open data set", command=self.open_file)
+        filemenu.add_command(label="Save data set", command=self.save_file)
+        filemenu.add_separator()
+        filemenu.add_command(label="Exit", command=root.quit)
+        menubar.add_cascade(label="File", menu=filemenu)
+
+        helpmenu = Tk.Menu(menubar, tearoff=0)
+        helpmenu.add_command(label="About", command=hello)
+        menubar.add_cascade(label="Help", menu=helpmenu)
+
+        # define options for opening or saving a file
+        self.file_opt = options = {}
+        options['defaultextension'] = '.dat'
+        options['filetypes'] = [('all files', '.*'), ('SVMlight  files', '.dat'), ('comma separated values', '.csv'), ('Weka files', '.arff')]
+        options['initialdir'] = './'
+        options['initialfile'] = 'mydataset.dat'
+        options['parent'] = root
+        options['title'] = 'Choose file name and format'
+
+        # display the menu
+        root.config(menu=menubar)
+
+    def open_file(self):
+        file_name = tkFileDialog.askopenfilename(**self.file_opt)
+        self.controller.open_file(file_name)
+
+
+    def save_file(self):
+        file_name = tkFileDialog.asksaveasfilename(**self.file_opt)
+        self.controller.save_file(file_name)
+
+
 class ControllBar(object):
     def __init__(self, root, controller):
+
+        # Hyper-parameters form
         fm = Tk.Frame(root)
         kernel_group = Tk.Frame(fm)
         Tk.Radiobutton(kernel_group, text="Linear", variable=controller.kernel,
@@ -343,20 +406,29 @@ class ControllBar(object):
         Tk.Entry(g, width=6, textvariable=controller.gamma).pack(side=Tk.LEFT)
         g.pack()
 
+        controller.epsilon = Tk.StringVar()
+        controller.epsilon.set("5")
+        g = Tk.Frame(valbox)
+        Tk.Label(g, text="epsilon:", anchor="e", width=7).pack(side=Tk.LEFT)
+        Tk.Entry(g, width=6, textvariable=controller.epsilon).pack(side=Tk.LEFT)
+        g.pack()
+        valbox.pack(side=Tk.LEFT)
+
+        valboxpol = Tk.Frame(fm)
         controller.degree = Tk.StringVar()
         controller.degree.set("3")
-        d = Tk.Frame(valbox)
+        d = Tk.Frame(valboxpol)
         Tk.Label(d, text="degree:", anchor="e", width=7).pack(side=Tk.LEFT)
         Tk.Entry(d, width=6, textvariable=controller.degree).pack(side=Tk.LEFT)
         d.pack()
 
         controller.coef0 = Tk.StringVar()
         controller.coef0.set("0")
-        r = Tk.Frame(valbox)
+        r = Tk.Frame(valboxpol)
         Tk.Label(r, text="coef0:", anchor="e", width=7).pack(side=Tk.LEFT)
         Tk.Entry(r, width=6, textvariable=controller.coef0).pack(side=Tk.LEFT)
         r.pack()
-        valbox.pack(side=Tk.LEFT)
+        valboxpol.pack(side=Tk.LEFT)
 
         cmap_group = Tk.Frame(fm)
         Tk.Radiobutton(cmap_group, text="Hyperplanes",
@@ -378,12 +450,17 @@ class ControllBar(object):
 
         reg_group.pack(side=Tk.LEFT)
 
+
         train_button = Tk.Button(fm, text='Fit', width=5,
                                  command=controller.fit)
         train_button.pack()
         fm.pack(side=Tk.LEFT)
         Tk.Button(fm, text='Clear', width=5,
                   command=controller.clear_data).pack(side=Tk.LEFT)
+
+
+def hello():
+    print("hello!")
 
 
 def get_parser():
