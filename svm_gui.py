@@ -22,7 +22,8 @@ from __future__ import division, print_function
 
 print(__doc__)
 
-# Author: Peter Prettenhoer <peter.prettenhofer@gmail.com>
+# Author: Peter Prettenhoer <peter.prettenhofer@gmail.com> (original svm_gui example)
+#         Javier Sánchez <jsanchezm@uco.es> (extension to regression case)
 #
 # License: BSD 3 clause
 
@@ -77,7 +78,7 @@ class Model(object):
     def load_svmlight_file(self, file):
         X, y = load_svmlight_file(file)
         self.data = []
-        self.data =  np.concatenate( (X.toarray(), np.transpose([y])), axis=1).tolist()
+        self.data =  np.concatenate((X.toarray(), np.transpose([y])), axis=1).tolist()
 
     def dump_svmlight_file(self, file):
         data = np.array(self.data)
@@ -95,7 +96,6 @@ class Controller(object):
         self.fitted = False
 
     def fit(self):
-        print("fit the model")
         train = np.array(self.model.data)
 
         C = float(self.complexity.get())
@@ -222,7 +222,6 @@ class View(object):
             if event.button == 1:
                 self.controller.add_example(event.xdata, event.ydata, 1)
             elif event.button == 3:
-                print(self.controller.classification.get())
                 self.controller.add_example(event.xdata, event.ydata, -1 if self.controller.classification.get() else 1)
 
 
@@ -449,7 +448,6 @@ class ControllBar(object):
                        command=controller.refit).pack(anchor=Tk.W)
 
         reg_group.pack(side=Tk.LEFT)
-
 
         train_button = Tk.Button(fm, text='Fit', width=5,
                                  command=controller.fit)
